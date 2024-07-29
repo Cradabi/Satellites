@@ -11,7 +11,9 @@
 #include <QFile>
 #include <QTextStream>
 
+
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
+
 {
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -34,10 +36,14 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     connect(saveButton, &QPushButton::clicked, this, &MainWindow::saveStatistics);
 
     m_networkManager = new QNetworkAccessManager(this);
+
 }
 
+
 void MainWindow::loadFromFile()
+
 {
+
     QString fileName = QFileDialog::getOpenFileName(this, "Open TLE File", "", "TLE Files (*.txt);;All Files (*)");
     if (fileName.isEmpty())
         return;
@@ -48,7 +54,6 @@ void MainWindow::loadFromFile()
         QMessageBox::critical(this, "Error", "Could not open file: " + file.errorString());
         return;
     }
-
     QTextStream in(&file);
     QString content = in.readAll();
     file.close();
@@ -56,7 +61,9 @@ void MainWindow::loadFromFile()
     processData(content);
 }
 
+
 void MainWindow::loadFromUrl()
+
 {
     QString url = QInputDialog::getText(this, "Enter URL", "URL:");
     if (url.isEmpty())
@@ -69,58 +76,92 @@ void MainWindow::loadFromUrl()
             QMessageBox::critical(this, "Error", "Could not load data: " + reply->errorString());
             reply->deleteLater();
             return;
+
         }
 
         QString content = QString::fromUtf8(reply->readAll());
         reply->deleteLater();
         processData(content);
+
     });
+
 }
+
 
 void MainWindow::processData(const QString &content)
 {
     QStringList lines = content.split("\n", QString::SkipEmptyParts);
     int satelliteCount = lines.size() / 3;
-    QDateTime oldestDate = QDateTime::currentDateTime();
+    QDateTime oldestDate;
+    bool isFirstValidDate = true;
     QMap<int, int> launchYears;
     QMap<int, int> inclinations;
 
     for (int i = 0; i < lines.size(); i += 3)
     {
+        if (i + 2 >= lines.size())
+            break;
+
         QString line1 = lines[i + 1].trimmed();
         QString line2 = lines[i + 2].trimmed();
 
-        // Extract launch year
         int year = line1.mid(9, 2).toInt();
-        year += (year < 57) ? 2000 : 1900;
+        if (year < 57) {
+            year += 2000;
+        } else {
+            year += 1900;
+        }
         launchYears[year]++;
 
-        // Extract inclination
-        int inclination = qRound(line2.mid(8, 8).toDouble());
-        inclinations[inclination]++;
+        bool ok;
+        double inclinationDouble = line2.mid(8, 8).toDouble(&ok);
+        if (ok) {
+            int inclination = qRound(inclinationDouble);
+            inclinations[inclination]++;
+        }
 
-        // Check for oldest date
-        QDateTime epochDate = QDateTime::fromString(line1.mid(18, 14), "yyDDD.dddddddd");
-        if (epochDate < oldestDate)
-            oldestDate = epochDate;
+        int epochYear = line1.mid(18, 2).toInt();
+        int dayOfYear = line1.mid(20, 3).toInt();
+
+        if (epochYear < 57) {
+            epochYear += 2000;
+        } else {
+            epochYear += 1900;
+        }
+
+        QDate epochDate = QDate(epochYear, 1, 1).addDays(dayOfYear - 1);
+        if (epochDate.isValid()) {
+            if (isFirstValidDate || epochDate < oldestDate.date()) {
+                oldestDate = QDateTime(epochDate);
+                isFirstValidDate = false;
+            }
+        }
     }
 
     QString statistics;
-    statistics += QString("Total satellites: %1\n").arg(satelliteCount);
-    statistics += QString("Oldest data date: %1\n").arg(oldestDate.toString(Qt::ISODate));
+    statistics += "Total satellites: " + QString::number(satelliteCount) + "\n";
+    if (oldestDate.isValid()) {
+        statistics += "Oldest data date: " + oldestDate.toString("yyyy-MM-dd");
+    } else {
+        statistics += "Oldest data date: Not available\n";
+    }
 
     statistics += "\nLaunches by year:\n";
-    for (auto it = launchYears.constBegin(); it != launchYears.constEnd(); ++it)
+    for (auto it = launchYears.begin(); it != launchYears.end(); ++it) {
         statistics += QString("%1: %2\n").arg(it.key()).arg(it.value());
+    }
 
     statistics += "\nInclinations:\n";
-    for (auto it = inclinations.constBegin(); it != inclinations.constEnd(); ++it)
+    for (auto it = inclinations.begin(); it != inclinations.end(); ++it) {
         statistics += QString("%1°: %2\n").arg(it.key()).arg(it.value());
+    }
 
     m_textEdit->setText(statistics);
 }
 
+
 void MainWindow::saveStatistics()
+
 {
     QString fileName = QFileDialog::getSaveFileName(this, "Save Statistics", "", "Text Files (*.txt);;All Files (*)");
     if (fileName.isEmpty())
@@ -136,6 +177,6 @@ void MainWindow::saveStatistics()
     QTextStream out(&file);
     out << m_textEdit->toPlainText();
     file.close();
-
     QMessageBox::information(this, "Success", "Statistics saved successfully.");
+
 }

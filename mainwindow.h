@@ -1,6 +1,7 @@
 #include <QMainWindow>
 #include <QTextEdit>
 #include <QNetworkAccessManager>
+#include <iostream>
 
 class MainWindow : public QMainWindow
 {
